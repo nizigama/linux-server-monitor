@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/glebarez/sqlite"
+	"github.com/go-playground/validator/v10"
 	"github.com/julienschmidt/httprouter"
 	"github.com/nizigama/linux-server-monitor/services"
 	"github.com/nizigama/linux-server-monitor/types"
@@ -40,6 +41,28 @@ func main() {
 	router.GET("/metrics/:start/:end", func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 		startDatetime := params.ByName("start")
 		endDatetime := params.ByName("end")
+
+		validate := validator.New()
+
+		err := validate.Struct(struct {
+			StartDatetime string `validate:"required,datetime=2006-01-02 15:04:05"`
+			EndDatetime   string `validate:"required,datetime=2006-01-02 15:04:05"`
+		}{
+			StartDatetime: startDatetime,
+			EndDatetime:   endDatetime,
+		})
+		if err != nil {
+
+			var validationErrors []string
+			for _, err := range err.(validator.ValidationErrors) {
+				validationErrors = append(validationErrors, err.Error())
+			}
+
+			w.WriteHeader(http.StatusBadRequest)
+			out, _ := json.Marshal(validationErrors)
+			_, _ = w.Write(out)
+			return
+		}
 
 		metrics, err := services.GetMetrics(db, startDatetime, endDatetime)
 		if err != nil {
