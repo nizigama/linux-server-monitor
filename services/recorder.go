@@ -1,7 +1,7 @@
 package services
 
 import (
-	"github.com/nizigama/linux-server-monitor/types"
+	"github.com/nizigama/linux-server-monitor/structs"
 	"gorm.io/gorm"
 	"log"
 	"os"
@@ -28,7 +28,7 @@ func RecordMetrics(db *gorm.DB) {
 			go func() {
 				metrics, _ := LoadCpuMetrics()
 
-				err := db.Create(&types.Cpu{
+				err := db.Create(&structs.Cpu{
 					Datetime: datetime,
 					Metrics:  metrics,
 				}).Error
@@ -43,7 +43,7 @@ func RecordMetrics(db *gorm.DB) {
 			go func() {
 				metrics, _ := LoadMemoryMetrics()
 
-				err := db.Create(&types.Memory{
+				err := db.Create(&structs.Memory{
 					Datetime: datetime,
 					Metrics:  metrics,
 				}).Error
@@ -58,7 +58,7 @@ func RecordMetrics(db *gorm.DB) {
 			go func() {
 				metrics, _ := LoadDiskMetrics()
 
-				err := db.Create(&types.Disk{
+				err := db.Create(&structs.Disk{
 					Datetime: datetime,
 					Metrics:  metrics,
 				}).Error

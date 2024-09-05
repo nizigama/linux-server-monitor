@@ -1,19 +1,14 @@
 package services
 
 import (
-	"github.com/nizigama/linux-server-monitor/types"
+	"github.com/nizigama/linux-server-monitor/structs"
 	"gorm.io/gorm"
 	"time"
 )
 
-type Metrics struct {
-	Type string
-	Data [][][]string
-}
+func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]structs.Metrics, error) {
 
-func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]Metrics, error) {
-
-	metrics := []Metrics{
+	metrics := []structs.Metrics{
 		{
 			Type: "Cpu",
 			Data: [][][]string{},
@@ -28,9 +23,9 @@ func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]Metric
 		},
 	}
 
-	cpuMetrics := []types.Cpu{}
-	memoryMetrics := []types.Memory{}
-	diskMetrics := []types.Disk{}
+	cpuMetrics := []structs.Cpu{}
+	memoryMetrics := []structs.Memory{}
+	diskMetrics := []structs.Disk{}
 
 	start, err := time.ParseInLocation(time.DateTime, startDatetime, time.Local)
 	if err != nil {

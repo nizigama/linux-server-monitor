@@ -2,14 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/glebarez/sqlite"
 	"github.com/go-playground/validator/v10"
 	"github.com/julienschmidt/httprouter"
 	"github.com/nizigama/linux-server-monitor/services"
-	"github.com/nizigama/linux-server-monitor/types"
+	"github.com/nizigama/linux-server-monitor/structs"
 	"gorm.io/gorm"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 )
 
 func main() {
@@ -20,7 +23,7 @@ func main() {
 	}
 
 	// Migrate the schema
-	err = db.AutoMigrate(&types.Cpu{}, &types.Memory{}, &types.Disk{})
+	err = db.AutoMigrate(&structs.Cpu{}, &structs.Memory{}, &structs.Disk{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -81,7 +84,15 @@ func main() {
 		_, _ = w.Write(data)
 	})
 
-	err = http.ListenAndServe(":8090", router)
+	serverPort := os.Getenv("LINUX_SERVER_MONITOR_PORT")
+	port := 8090
+
+	envPort, _ := strconv.Atoi(serverPort)
+	if envPort > 1024 && envPort < 65535 {
+		port = envPort
+	}
+
+	err = http.ListenAndServe(fmt.Sprintf(":%v", port), router)
 	if err != nil {
 		log.Fatal(err)
 	}
