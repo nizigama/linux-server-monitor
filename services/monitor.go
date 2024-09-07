@@ -12,7 +12,7 @@ func LoadCpuMetrics() ([][]string, error) {
 
 	logger := log.New(os.Stdout, "CPU: ", log.LstdFlags)
 
-	cmd := exec.Command("bash", "-c", `mpstat -P ALL 1 1 | awk -v time="$(date +'%Y-%m-%d %H:%M:%S')" '/^Average/ && $2 ~ /[0-9]/ {printf "%s,core %s,%.2f\n", time, $2, 100 - $NF}'`)
+	cmd := exec.Command("bash", "-c", `mpstat -P ALL 1 1 | awk -v time="$(date +'%Y-%m-%d %H:%M:%S %Z')" '/^Average/ && $2 ~ /[0-9]/ {printf "%s,core %s,%.2f\n", time, $2, 100 - $NF}'`)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -45,7 +45,7 @@ func LoadMemoryMetrics() ([][]string, error) {
 
 	logger := log.New(os.Stdout, "MEMORY: ", log.LstdFlags)
 
-	cmd := exec.Command("bash", "-c", `free | awk '/Mem:/ {printf("%s,%.2f\n", strftime("%Y-%m-%d %H:%M:%S"), $3/$2 * 100.0)}'`)
+	cmd := exec.Command("bash", "-c", `free | awk '/Mem:/ {printf("%s,%.2f\n", strftime("%Y-%m-%d %H:%M:%S %Z"), $3/$2 * 100.0)}'`)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -78,7 +78,7 @@ func LoadDiskMetrics() ([][]string, error) {
 
 	logger := log.New(os.Stdout, "DISK: ", log.LstdFlags)
 
-	cmd := exec.Command("bash", "-c", `df -h --output=source,pcent / | awk -v time="$(date +'%Y-%m-%d %H:%M:%S')" 'NR==2 {print time "," $1 "," $2}'`)
+	cmd := exec.Command("bash", "-c", `df -h --output=source,pcent / | awk -v time="$(date +'%Y-%m-%d %H:%M:%S %Z')" 'NR==2 {print time "," $1 "," $2}'`)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

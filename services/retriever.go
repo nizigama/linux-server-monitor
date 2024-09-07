@@ -83,12 +83,12 @@ func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]struct
 	for _, metric := range cpuMetrics {
 
 		if len(metrics[0].Data) > 0 {
-			lastMetricTimestamp, err := time.Parse(time.DateTime, metrics[0].Data[len(metrics[0].Data)-1][0][0])
+			lastMetricTimestamp, err := time.Parse("2006-01-02 15:04:05 MST", metrics[0].Data[len(metrics[0].Data)-1][0][0])
 			if err != nil {
 				log.Println(err)
 				return nil, err
 			}
-			currentMetricTimestamp, err := time.Parse(time.DateTime, metric.Metrics[0][0])
+			currentMetricTimestamp, err := time.Parse("2006-01-02 15:04:05 MST", metric.Metrics[0][0])
 			if err != nil {
 				log.Println(err)
 				return nil, err
@@ -141,12 +141,12 @@ func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]struct
 	for _, metric := range memoryMetrics {
 
 		if len(metrics[1].Data) > 0 {
-			lastMetricTimestamp, err := time.Parse(time.DateTime, metrics[1].Data[len(metrics[1].Data)-1][0][0])
+			lastMetricTimestamp, err := time.Parse("2006-01-02 15:04:05 MST", metrics[1].Data[len(metrics[1].Data)-1][0][0])
 			if err != nil {
 				log.Println(err)
 				return nil, err
 			}
-			currentMetricTimestamp, err := time.Parse(time.DateTime, metric.Metrics[0][0])
+			currentMetricTimestamp, err := time.Parse("2006-01-02 15:04:05 MST", metric.Metrics[0][0])
 			if err != nil {
 				log.Println(err)
 				return nil, err
@@ -199,12 +199,12 @@ func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]struct
 	for _, metric := range diskMetrics {
 
 		if len(metrics[2].Data) > 0 {
-			lastMetricTimestamp, err := time.Parse(time.DateTime, metrics[1].Data[len(metrics[2].Data)-1][0][0])
+			lastMetricTimestamp, err := time.Parse("2006-01-02 15:04:05 MST", metrics[1].Data[len(metrics[2].Data)-1][0][0])
 			if err != nil {
 				log.Println(err)
 				return nil, err
 			}
-			currentMetricTimestamp, err := time.Parse(time.DateTime, metric.Metrics[0][0])
+			currentMetricTimestamp, err := time.Parse("2006-01-02 15:04:05 MST", metric.Metrics[0][0])
 			if err != nil {
 				log.Println(err)
 				return nil, err
