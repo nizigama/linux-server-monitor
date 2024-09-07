@@ -64,6 +64,8 @@ func main() {
 			w.WriteHeader(http.StatusBadRequest)
 			out, _ := json.Marshal(validationErrors)
 			_, _ = w.Write(out)
+
+			log.Println("Bad request", validationErrors)
 			return
 		}
 
@@ -77,11 +79,15 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			out, _ := json.Marshal(response)
 			_, _ = w.Write(out)
+
+			log.Println("Failed to get metrics")
 			return
 		}
 
 		data, _ := json.Marshal(metrics)
 		_, _ = w.Write(data)
+
+		log.Println("Fetched metrics...")
 	})
 
 	serverPort := os.Getenv("LINUX_SERVER_MONITOR_PORT")
@@ -91,6 +97,8 @@ func main() {
 	if envPort > 1024 && envPort < 65535 {
 		port = envPort
 	}
+
+	log.Println("Listening on port: ", port)
 
 	err = http.ListenAndServe(fmt.Sprintf(":%v", port), router)
 	if err != nil {
