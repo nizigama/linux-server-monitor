@@ -10,6 +10,7 @@ import (
 const (
 	everyThirtySeconds structs.Interval = iota
 	everyMinute
+	everyTenMinute
 	everyFifteenMinute
 	everyThirtyMinutes
 	noLimit
@@ -107,6 +108,13 @@ func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]struct
 				}
 
 				metrics[0].Data = append(metrics[0].Data, metric.Metrics)
+			case interval == everyTenMinute:
+
+				if currentMetricTimestamp.Sub(lastMetricTimestamp).Minutes() <= 10 {
+					continue
+				}
+
+				metrics[0].Data = append(metrics[0].Data, metric.Metrics)
 			case interval == everyFifteenMinute:
 
 				if currentMetricTimestamp.Sub(lastMetricTimestamp).Minutes() <= 15 {
@@ -158,6 +166,13 @@ func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]struct
 				}
 
 				metrics[1].Data = append(metrics[1].Data, metric.Metrics)
+			case interval == everyTenMinute:
+
+				if currentMetricTimestamp.Sub(lastMetricTimestamp).Minutes() <= 10 {
+					continue
+				}
+
+				metrics[1].Data = append(metrics[1].Data, metric.Metrics)
 			case interval == everyFifteenMinute:
 
 				if currentMetricTimestamp.Sub(lastMetricTimestamp).Minutes() <= 15 {
@@ -205,6 +220,13 @@ func GetMetrics(db *gorm.DB, startDatetime string, endDatetime string) ([]struct
 				metrics[2].Data = append(metrics[2].Data, metric.Metrics)
 			case interval == everyMinute:
 				if currentMetricTimestamp.Sub(lastMetricTimestamp).Minutes() <= 1 {
+					continue
+				}
+
+				metrics[2].Data = append(metrics[2].Data, metric.Metrics)
+			case interval == everyTenMinute:
+
+				if currentMetricTimestamp.Sub(lastMetricTimestamp).Minutes() <= 10 {
 					continue
 				}
 
