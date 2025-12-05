@@ -22,3 +22,7 @@ The available statistics, in percentages, are:
     ```shell
         env GOOS=linux GOARCH=386 go build -v -o bin/linux-386 *.go
     ```
+- Run tests
+  ```shell
+  go test ./services/... -v
+  ```

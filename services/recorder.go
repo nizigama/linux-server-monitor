@@ -1,12 +1,13 @@
 package services
 
 import (
-	"github.com/nizigama/linux-server-monitor/structs"
-	"gorm.io/gorm"
 	"log"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/nizigama/linux-server-monitor/structs"
+	"gorm.io/gorm"
 )
 
 func RecordMetrics(db *gorm.DB) {
@@ -26,45 +27,81 @@ func RecordMetrics(db *gorm.DB) {
 			wg.Add(3)
 
 			go func() {
-				metrics, _ := LoadCpuMetrics()
+				metrics, err := LoadCpuMetrics()
+				if err != nil {
+					logger.Printf("Failed to load CPU metrics: %v", err)
+					wg.Done()
+					return
+				}
 
-				err := db.Create(&structs.Cpu{
+				// Validate metrics before storing
+				if len(metrics) == 0 || len(metrics[0]) == 0 {
+					logger.Println("Skipping empty CPU metrics")
+					wg.Done()
+					return
+				}
+
+				err = db.Create(&structs.Cpu{
 					Datetime: datetime,
 					Metrics:  metrics,
 				}).Error
 
 				if err != nil {
-					logger.Println(err)
+					logger.Printf("Failed to save CPU metrics: %v", err)
 				}
 
 				wg.Done()
 			}()
 
 			go func() {
-				metrics, _ := LoadMemoryMetrics()
+				metrics, err := LoadMemoryMetrics()
+				if err != nil {
+					logger.Printf("Failed to load Memory metrics: %v", err)
+					wg.Done()
+					return
+				}
 
-				err := db.Create(&structs.Memory{
+				// Validate metrics before storing
+				if len(metrics) == 0 || len(metrics[0]) == 0 {
+					logger.Println("Skipping empty Memory metrics")
+					wg.Done()
+					return
+				}
+
+				err = db.Create(&structs.Memory{
 					Datetime: datetime,
 					Metrics:  metrics,
 				}).Error
 
 				if err != nil {
-					logger.Println(err)
+					logger.Printf("Failed to save Memory metrics: %v", err)
 				}
 
 				wg.Done()
 			}()
 
 			go func() {
-				metrics, _ := LoadDiskMetrics()
+				metrics, err := LoadDiskMetrics()
+				if err != nil {
+					logger.Printf("Failed to load Disk metrics: %v", err)
+					wg.Done()
+					return
+				}
 
-				err := db.Create(&structs.Disk{
+				// Validate metrics before storing
+				if len(metrics) == 0 || len(metrics[0]) == 0 {
+					logger.Println("Skipping empty Disk metrics")
+					wg.Done()
+					return
+				}
+
+				err = db.Create(&structs.Disk{
 					Datetime: datetime,
 					Metrics:  metrics,
 				}).Error
 
 				if err != nil {
-					logger.Println(err)
+					logger.Printf("Failed to save Disk metrics: %v", err)
 				}
 
 				wg.Done()
