@@ -33,6 +33,10 @@ func main() {
 		services.RecordMetrics(db)
 	}(db)
 
+	if os.Getenv("METRICS_SYNC_DISABLED") != "true" {
+		go services.SyncMetrics(db)
+	}
+
 	router := httprouter.New()
 
 	router.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
