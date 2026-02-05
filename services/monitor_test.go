@@ -2,10 +2,15 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
+	"errors"
+	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Helper function to test CPU metrics parsing with sample mpstat output
@@ -293,4 +298,240 @@ Average:       1  100.00    0.00    0.00    0.00    0.00    0.00    0.00    0.00
 			testCpuMetricsParsing(t, tt.mpstatOutput, tt.expectedCores)
 		})
 	}
+}
+
+func TestLoadCpuMetrics_WhenMpstatNotAvailable(t *testing.T) {
+	savedLookPath := lookPath
+	savedSleep := procStatSleep
+	defer func() {
+		lookPath = savedLookPath
+		procStatSleep = savedSleep
+	}()
+	lookPath = func(string) (string, error) { return "", errors.New("mpstat not found") }
+	procStatSleep = func(time.Duration) {} // avoid 1s wait in fallback path
+
+	res, err := LoadCpuMetrics()
+
+	if err != nil {
+		// On non-Linux we may get "open /proc/stat: no such file or directory"
+		if runtime.GOOS != "linux" {
+			t.Skipf("skipping: /proc/stat not available on %s", runtime.GOOS)
+		}
+		// Ensure we took the fallback path: error must not be from mpstat
+		if strings.Contains(err.Error(), "mpstat timed out") || strings.Contains(err.Error(), "mpstat returned no metrics") {
+			t.Errorf("expected fallback to /proc/stat; got mpstat-style error: %v", err)
+		}
+		return
+	}
+
+	// Linux with /proc/stat: validate result shape
+	for i, row := range res {
+		if len(row) != 3 {
+			t.Errorf("row %d: expected 3 columns (timestamp, core, usage), got %d: %v", i, len(row), row)
+		}
+		if len(row) >= 2 && !strings.HasPrefix(row[1], "core ") {
+			t.Errorf("row %d: core name should start with 'core ', got %q", i, row[1])
+		}
+	}
+}
+
+func TestReadProcStatCores(t *testing.T) {
+	// Sample /proc/stat content: cpu + cpu0 + cpu1, and a line with too few fields to skip
+	content := `cpu  100 50 80 200 10 0 5 0 0 0
+cpu0 40 20 30 80 5 0 2 0 0 0
+cpu1 60 30 50 120 5 0 3 0 0 0
+ctxt 12345
+btime 1234567890
+cpu  1 2 3
+`
+	f, err := os.CreateTemp("", "procstat-*.txt")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(content); err != nil {
+		f.Close()
+		t.Fatalf("WriteString: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	cores, err := readProcStatCores(f.Name())
+	if err != nil {
+		t.Fatalf("readProcStatCores: %v", err)
+	}
+
+	// Expect "core all", "core 0", "core 1". Line "cpu  1 2 3" has only 3 numeric fields after name, so skipped (need at least 4).
+	wantKeys := map[string]bool{"core all": true, "core 0": true, "core 1": true}
+	for k := range cores {
+		if !wantKeys[k] {
+			t.Errorf("unexpected key %q", k)
+		}
+	}
+	for _, k := range []string{"core all", "core 0", "core 1"} {
+		if !wantKeys[k] {
+			continue
+		}
+		s, ok := cores[k]
+		if !ok {
+			t.Errorf("missing key %q", k)
+			continue
+		}
+		if s.total == 0 {
+			t.Errorf("%s: total is 0", k)
+		}
+		// core all: user=100 nice=50 sys=80 idle=200 iowait=10 -> total=445, idle=200+10=210
+		if k == "core all" {
+			if s.idle != 210 || s.total != 445 {
+				t.Errorf("core all: expected idle=210 total=445, got idle=%d total=%d", s.idle, s.total)
+			}
+		}
+	}
+}
+
+func TestLoadCpuMetricsProcStatFromGetter(t *testing.T) {
+	savedSleep := procStatSleep
+	defer func() { procStatSleep = savedSleep }()
+	procStatSleep = func(time.Duration) {}
+
+	t.Run("computes usage from two snapshots", func(t *testing.T) {
+		callCount := 0
+		getCores := func() (map[string]cpuStat, error) {
+			callCount++
+			if callCount == 1 {
+				return map[string]cpuStat{"core 0": {idle: 100, total: 200}}, nil
+			}
+			// idle 100->150 (+50), total 200->300 (+100) -> usage = 100*(1 - 50/100) = 50%
+			return map[string]cpuStat{"core 0": {idle: 150, total: 300}}, nil
+		}
+		res, err := loadCpuMetricsProcStatFromGetter(getCores)
+		if err != nil {
+			t.Fatalf("loadCpuMetricsProcStatFromGetter: %v", err)
+		}
+		if len(res) != 1 {
+			t.Fatalf("expected 1 row, got %d", len(res))
+		}
+		if len(res[0]) != 3 {
+			t.Fatalf("expected 3 columns, got %v", res[0])
+		}
+		if res[0][1] != "core 0" {
+			t.Errorf("expected core name 'core 0', got %q", res[0][1])
+		}
+		if res[0][2] != "50.00" {
+			t.Errorf("expected usage 50.00, got %q", res[0][2])
+		}
+	})
+
+	t.Run("skips when totalDelta is zero", func(t *testing.T) {
+		same := map[string]cpuStat{"core 0": {idle: 100, total: 200}}
+		getCores := func() (map[string]cpuStat, error) {
+			return same, nil
+		}
+		res, err := loadCpuMetricsProcStatFromGetter(getCores)
+		if err == nil {
+			t.Fatalf("expected error when all deltas are zero (no metrics), got %d rows", len(res))
+		}
+		if !strings.Contains(err.Error(), "/proc/stat returned no metrics") {
+			t.Errorf("expected '/proc/stat returned no metrics', got %q", err.Error())
+		}
+	})
+
+	t.Run("returns error when getter fails on first call", func(t *testing.T) {
+		getCores := func() (map[string]cpuStat, error) {
+			return nil, errors.New("read failed")
+		}
+		_, err := loadCpuMetricsProcStatFromGetter(getCores)
+		if err == nil {
+			t.Fatal("expected error from getter")
+		}
+		if err.Error() != "read failed" {
+			t.Errorf("expected 'read failed', got %q", err.Error())
+		}
+	})
+
+	t.Run("returns error when getter fails on second call", func(t *testing.T) {
+		callCount := 0
+		getCores := func() (map[string]cpuStat, error) {
+			callCount++
+			if callCount == 1 {
+				return map[string]cpuStat{"core 0": {idle: 100, total: 200}}, nil
+			}
+			return nil, errors.New("second read failed")
+		}
+		_, err := loadCpuMetricsProcStatFromGetter(getCores)
+		if err == nil {
+			t.Fatal("expected error on second getter call")
+		}
+		if err.Error() != "second read failed" {
+			t.Errorf("expected 'second read failed', got %q", err.Error())
+		}
+	})
+
+	t.Run("returns error when no metrics produced", func(t *testing.T) {
+		getCores := func() (map[string]cpuStat, error) {
+			return map[string]cpuStat{}, nil
+		}
+		_, err := loadCpuMetricsProcStatFromGetter(getCores)
+		if err == nil {
+			t.Fatal("expected error when no metrics")
+		}
+		if !strings.Contains(err.Error(), "/proc/stat returned no metrics") {
+			t.Errorf("expected '/proc/stat returned no metrics', got %q", err.Error())
+		}
+	})
+}
+
+func TestLoadCpuMetricsMpstat_ErrorPaths(t *testing.T) {
+	savedExec := execCommandContext
+	savedCtx := makeLoadCpuMetricsMpstatContext
+	defer func() {
+		execCommandContext = savedExec
+		makeLoadCpuMetricsMpstatContext = savedCtx
+	}()
+
+	t.Run("returns error when command writes to stderr", func(t *testing.T) {
+		execCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+			return exec.CommandContext(ctx, "sh", "-c", "echo 'mpstat: some error' >&2; exit 0")
+		}
+		_, err := loadCpuMetricsMpstat()
+		if err == nil {
+			t.Fatal("expected error when stderr is non-empty")
+		}
+		if !strings.Contains(err.Error(), "mpstat:") || !strings.Contains(err.Error(), "some error") {
+			t.Errorf("expected error to contain stderr content, got %q", err.Error())
+		}
+	})
+
+	t.Run("returns mpstat timed out when context expires during run", func(t *testing.T) {
+		makeLoadCpuMetricsMpstatContext = func() (context.Context, context.CancelFunc) {
+			return context.WithTimeout(context.Background(), 10*time.Millisecond)
+		}
+		execCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+			return exec.CommandContext(ctx, "sh", "-c", "sleep 10")
+		}
+		_, err := loadCpuMetricsMpstat()
+		if err == nil {
+			t.Fatal("expected error when context expires")
+		}
+		if err.Error() != "mpstat timed out" {
+			t.Errorf("expected 'mpstat timed out', got %q", err.Error())
+		}
+	})
+
+	t.Run("returns error when stdout is empty", func(t *testing.T) {
+		makeLoadCpuMetricsMpstatContext = func() (context.Context, context.CancelFunc) {
+			return context.WithTimeout(context.Background(), 5*time.Second)
+		}
+		execCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+			return exec.CommandContext(ctx, "sh", "-c", "exit 0")
+		}
+		_, err := loadCpuMetricsMpstat()
+		if err == nil {
+			t.Fatal("expected error when stdout is empty")
+		}
+		if err.Error() != "mpstat returned no metrics" {
+			t.Errorf("expected 'mpstat returned no metrics', got %q", err.Error())
+		}
+	})
 }
